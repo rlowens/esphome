@@ -1,0 +1,123 @@
+# Common code for Novostella 20W Flood Lights
+
+#Novostella 20W Flood Light, https://smile.amazon.com/gp/product/B07VH1VHYL
+#https://fccid.io/2AI5T-SFGD-002
+#https://blakadder.github.io/templates/novostella_20W_flood.html
+
+packages:
+  device_base: !include zz_common_device_base.yaml
+
+esp8266:
+  # early_pin_init: false  # Prevent the physical relay flipping on reboot.
+  restore_from_flash: true #writes each state change to flash for switch or light with restore_mode: RESTORE_DEFAULT_OFF/ON, see https://esphome.io/components/esphome.html#esp8266-restore-from-flash
+
+# Output pins
+output:
+- platform: esp8266_pwm
+  id: red
+  pin: GPIO4
+  inverted: False
+- platform: esp8266_pwm
+  id: green
+  pin: GPIO12
+  inverted: False
+- platform: esp8266_pwm
+  id: blue
+  pin: GPIO14
+  inverted: False
+- platform: esp8266_pwm
+  id: cold_white
+  pin: GPIO5
+  inverted: False
+- platform: esp8266_pwm
+  id: warm_white
+  pin: GPIO13
+  inverted: False
+
+light:
+- platform: cwww
+  name: ${friendly_name}
+  cold_white: cold_white
+  warm_white: warm_white
+  cold_white_color_temperature: 6500 K
+  warm_white_color_temperature: 2700 K
+  constant_brightness: true
+  id: thelight
+  restore_mode: RESTORE_DEFAULT_ON
+  effects:
+    - random:
+    - strobe:
+    - flicker:
+        alpha: 50% #The percentage that the last color value should affect the light. More or less the “forget-factor” of an exponential moving average. Defaults to 95%.
+        intensity: 50% #The intensity of the flickering, basically the maximum amplitude of the random offsets. Defaults to 1.5%.
+    - lambda:
+        name: Throb
+        update_interval: 1s
+        lambda: |-
+          static int state = 0;
+          auto call = id(thelight).turn_on();
+          // Transtion of 1000ms = 1s
+          call.set_transition_length(1000);
+          if (state == 0) {
+            call.set_brightness(1.0);
+          } else {
+            call.set_brightness(0.01);
+          }
+          call.perform();
+          state += 1;
+          if (state == 2)
+            state = 0;
+
+- platform: rgb
+  name: ${friendly_name} Color
+  red: red
+  green: green
+  blue: blue
+  id: thelightrgb
+  restore_mode: RESTORE_DEFAULT_OFF
+  effects:
+    - random:
+    - strobe:
+    - flicker:
+        alpha: 50% #The percentage that the last color value should affect the light. More or less the “forget-factor” of an exponential moving average. Defaults to 95%.
+        intensity: 50% #The intensity of the flickering, basically the maximum amplitude of the random offsets. Defaults to 1.5%.
+    - lambda:
+        name: Throb
+        update_interval: 1s
+        lambda: |-
+          static int state = 0;
+          auto call = id(thelight).turn_on();
+          // Transtion of 1000ms = 1s
+          call.set_transition_length(1000);
+          if (state == 0) {
+            call.set_brightness(1.0);
+          } else {
+            call.set_brightness(0.01);
+          }
+          call.perform();
+          state += 1;
+          if (state == 2)
+            state = 0;
+
+- platform: monochromatic
+  id: justred
+  output: red
+  restore_mode: ALWAYS_OFF
+
+# Blink the light if we aren't connected to WiFi.
+interval:
+- interval: 500ms
+  then:
+  - if:
+      condition:
+        not:
+          wifi.connected:
+      then:
+        - light.turn_on:
+            id: justred
+            brightness: 10%
+            transition_length: 0s
+        - delay: 250ms
+        - light.turn_off:
+            id: justred
+            transition_length: 250ms
